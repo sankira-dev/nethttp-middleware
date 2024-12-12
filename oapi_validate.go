@@ -21,14 +21,20 @@ import (
 // ErrorHandler is called when there is an error in validation
 type ErrorHandler func(w http.ResponseWriter, message string, statusCode int)
 
+// AdvancedErrorHandler is an alternative to ErrorHandler
+// It provides access to the full error object rather than just the error message
+type AdvancedErrorHandler func(w http.ResponseWriter, err error, statusCode int)
+
 // MultiErrorHandler is called when oapi returns a MultiError type
 type MultiErrorHandler func(openapi3.MultiError) (int, error)
 
 // Options to customize request validation, openapi3filter specified options will be passed through.
 type Options struct {
-	Options           openapi3filter.Options
-	ErrorHandler      ErrorHandler
-	MultiErrorHandler MultiErrorHandler
+	Options      openapi3filter.Options
+	ErrorHandler ErrorHandler
+	// AdvancedErrorHandler provides access to the full error object. If both AdvancedErrorHandler and ErrorHandler are provided, only the AdvancedErrorHandler is invoked
+	AdvancedErrorHandler AdvancedErrorHandler
+	MultiErrorHandler    MultiErrorHandler
 	// SilenceServersWarning allows silencing a warning for https://github.com/deepmap/oapi-codegen/issues/882 that reports when an OpenAPI spec has `spec.Servers != nil`
 	SilenceServersWarning bool
 }
@@ -54,7 +60,9 @@ func OapiRequestValidatorWithOptions(swagger *openapi3.T, options *Options) func
 
 			// validate request
 			if statusCode, err := validateRequest(r, router, options); err != nil {
-				if options != nil && options.ErrorHandler != nil {
+				if options != nil && options.AdvancedErrorHandler != nil {
+					options.AdvancedErrorHandler(w, err, statusCode)
+				} else if options != nil && options.ErrorHandler != nil {
 					options.ErrorHandler(w, err.Error(), statusCode)
 				} else {
 					http.Error(w, err.Error(), statusCode)
